@@ -3,10 +3,12 @@ import pickle
 import socket
 import sys
 
+from types import SimpleNamespace as sn
+
 def main():
     display_help()
     while True:
-        command = raw_input('enter command: ')
+        command = input('enter command: ')
         interpret_command(command)
 
 def interpret_command(command):
@@ -30,10 +32,12 @@ def display_help():
     print('exit\n')
 
 def register(user_name, ipv4, port):
-    s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-    s.sendto(pickle.dumps((user_name, ipv4, port)), (args.host, args.host_port))
-    data = s.recv(1024)
-    print(data.decode('utf-8'))
+    sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    request = sn(command='register', args=sn(user_name=user_name, ipv4=ipv4, port=int(port)))
+    sock.sendto(pickle.dumps(request), (args.host, args.host_port))
+    response = sock.recv(1024)
+    data = pickle.loads(response)
+    print(data.status)
 
 
 parser = argparse.ArgumentParser(description='Client process that tracks teh state of clients')
