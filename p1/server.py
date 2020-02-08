@@ -6,8 +6,6 @@ import socket
 from collections import namedtuple
 from types import SimpleNamespace as sn
 
-User = namedtuple('User', 'user_name ipv4 port')
-
 class Server:
     def __init__(self):
         self.registered_users = {}
@@ -64,4 +62,5 @@ parser.add_argument('--port', '-p',     type=int,
                                         help='port to listen on.')
 
 args = parser.parse_args()
+User = namedtuple('User', 'user_name ipv4 port')
 Server()
