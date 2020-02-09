@@ -10,6 +10,7 @@ class Server:
     def __init__(self):
         self.registered_users = {}
         self.user_state = {}
+        self.blocking = False
         self.num_DHTs = 0
         self.sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         self.sock.bind((socket.gethostname(), args.port))
@@ -29,6 +30,15 @@ class Server:
         self.sock.sendto(pickle.dumps(data), self.addr)
 
     def handle_datagram(self):
+        if self.blocking:
+            if (self.data.command == 'dht-complete' and
+                self.data.args.user_name == [user for user in self.user_state if self.user_state[user] == 'Leader'][0]):
+                self.blocking = False
+                return self.success()
+            else:
+                return self.failure()
+        if self.data.command == 'dht-complete':
+            return self.failure()
         if self.data.command == 'register':
             if self.data.args.ipv4 != self.addr[0] or self.data.args.port > 65535 or len(self.data.args.user_name) > 15:
                 return self.failure()
@@ -53,6 +63,7 @@ class Server:
                 self.user_state[random_free_user] = 'InDHT'
             self.num_DHTs += 1
             self.success(body=[self.registered_users[user] for user in dht_users])
+            self.blocking = True
 
 
 parser = argparse.ArgumentParser(description='Server process that tracks teh state of clients')

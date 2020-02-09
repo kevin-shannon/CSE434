@@ -16,7 +16,6 @@ class Client:
             self.interpret_command(command)
 
     def listen(self, port):
-        print('listening...')
         sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         sock.bind((socket.gethostname(), port))
         while True:
@@ -25,7 +24,6 @@ class Client:
             self.handle_datagram(data)
 
     def handle_datagram(self, data):
-        print('handeling...')
         if data.command == 'set-id':
             self.i = data.args.i
             self.n = data.args.n
@@ -43,9 +41,10 @@ class Client:
                 self.register(*command_split[1:])
             elif command_split[0] == 'setup-dht':
                 self.setup_dht(*command_split[1:])
+            elif command_split[0] == 'dht-complete':
+                self.dht_complete(*command_split[1:])
             else:
                 print("Command not understood, try again.")
-                print(self.next, self.prev)
 
     def display_help(self):
         print('\nAvailable commands:')
@@ -70,14 +69,22 @@ class Client:
         response = self.sock.recv(1024)
         data = pickle.loads(response)
         print(data.status)
-        n = len(data.body)
-        for i in range(1, n):
-            request = sn(command='set-id', args=sn(i=i, n=n, prev=data.body[(i-1) % n], next=data.body[(i+1) % n]))
-            self.sock.sendto(pickle.dumps(request), (data.body[i].ipv4, data.body[i].port))
-        self.i = 0
-        self.n = n
-        self.prev = data.body[-1 % n]
-        self.next = data.body[1]
+        if data.status == 'SUCCESS':
+            n = len(data.body)
+            for i in range(1, n):
+                request = sn(command='set-id', args=sn(i=i, n=n, prev=data.body[(i-1) % n], next=data.body[(i+1) % n]))
+                self.sock.sendto(pickle.dumps(request), (data.body[i].ipv4, data.body[i].port))
+            self.i = 0
+            self.n = n
+            self.prev = data.body[-1 % n]
+            self.next = data.body[1]
+
+    def dht_complete(self, user_name):
+        request = sn(command='dht-complete', args=sn(user_name=user_name))
+        self.sock.sendto(pickle.dumps(request), (args.host, args.host_port))
+        response = self.sock.recv(1024)
+        data = pickle.loads(response)
+        print(data.status)
 
 parser = argparse.ArgumentParser(description='Client process that tracks teh state of clients')
 
