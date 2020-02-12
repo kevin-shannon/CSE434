@@ -20,7 +20,7 @@ class HashTable:
         return i
 
     def add(self, record):
-        i = self.search(record.data['Long Name'], skip_tombstone=False)
+        i = self.search(record['Long Name'], skip_tombstone=False)
         self.table[i] = HashEntry(record)
 
     def remove(self, key):
@@ -33,21 +33,8 @@ class HashTable:
 class HashEntry:
     def __init__(self, record=None, key=None, tombstone=False):
     	self.record = record
-    	self.key = record.data['Long Name'] if key is None and record is not None else key
+    	self.key = record['Long Name'] if key is None and record is not None else key
     	self.tombstone = tombstone
 
     def __repr__(self):
-        return repr(self.record)
-
-class Record:
-    def __init__(self, data):
-        self.data = data
-
-    def __repr__(self):
-        return str(self.data)
-
-    def __hash__(self):
-        return sum(bytearray(self.data['Long Name'], 'utf-8'))
-
-    def __eq__(self, record):
-        return self.data == record.data
+        return str(self.record)
