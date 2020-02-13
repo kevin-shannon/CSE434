@@ -9,7 +9,6 @@ from collections import namedtuple
 from types import SimpleNamespace as sn
 from utils.HashTable import HashEntry
 from utils.HashTable import HashTable
-from utils.HashTable import Record
 
 
 class Client:
@@ -21,15 +20,23 @@ class Client:
             command = input('enter command: ')
             self.interpret_command(command)
 
+    def success(self, addr, body=None):
+        self.sock.sendto(pickle.dumps(sn(status='SUCCESS', body=body)), addr)
+
+    def failure(self, addr):
+        self.sock.sendto(pickle.dumps(sn(status='FAILURE', body=None)), addr)
+
     def listen(self, port):
         sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         sock.bind((socket.gethostname(), port))
         while True:
             raw_bytes, addr = sock.recvfrom(1024)
             data = pickle.loads(raw_bytes)
+            print('Received', data)
             self.handle_datagram(data)
 
-    def send_datagram(self, payload, addr=(args.host, args.host_port), supress=False):
+    def send_datagram(self, payload, addr=None, supress=False):
+        addr = addr if addr is not None else (args.host, args.host_port)
         self.sock.sendto(pickle.dumps(payload), addr)
         response = pickle.loads(self.sock.recv(1024))
         if not supress:
@@ -42,10 +49,9 @@ class Client:
             self.n = data.args.n
             self.prev = data.args.prev
             self.next = data.args.next
+            return self.success((self.prev.ipv4, self.prev.port))
         if data.command == 'store':
-            self.store(data)
-        if data.command == 'dht-complete':
-            self.dht_complete()
+            self.store(data.args.record)
 
     def interpret_command(self, command):
         if command == 'exit':
@@ -65,13 +71,13 @@ class Client:
         print('\nAvailable commands:')
         print('help')
         print('register <user-name> <port>')
-        print('setup-dht <n>')
+        print('setup-dht <n> <user-name>')
         print('query-dht <user-name>')
         print('exit\n')
 
-    def register(self, user_name, ipv4, port):
-        if send_datagram(sn(command='register', args=sn(user_name=user_name, ipv4=ipv4, port=int(port)))):
-            self.start_new_thread(self.listen, (int(port),))
+    def register(self, user_name, port):
+        if self.send_datagram(sn(command='register', args=sn(user_name=user_name, port=int(port)))):
+            start_new_thread(self.listen, (int(port),))
 
     def setup_dht(self, n, user_name):
         response = self.send_datagram(sn(command='setup-dht', args=sn(n=int(n), user_name=user_name)))
@@ -85,27 +91,31 @@ class Client:
             self.n = n
             self.prev = response.body[-1 % n]
             self.next = response.body[1]
+            print('reading csv')
 
             with open('StatsCountry.csv') as f:
                 reader = csv.DictReader(f)
                 for row in reader:
                     record = dict(row)
-                    self.store(record)
+                    id = self.hash_table.hash_func(record['Long Name']) % self.n
+                    if self.i == id:
+                        self.hash_table.add(record)
+                    else:
+                        print(f'sending record to {(self.next.ipv4, self.next.port)}')
+                        self.store(record)
+
+            print('complete')
+            self.send_datagram(sn(command='dht-complete', args=None))
 
     def store(self, record):
         id = self.hash_table.hash_func(record['Long Name']) % self.n
         if self.i == id:
             self.hash_table.add(record)
         else:
-            self.send_datagram(sn(command='store', args=sn(record=record)), (self.next.ipv4, self.next.port), supress=True)
+            print(f'sending record to {(self.next.ipv4, self.next.port)}')
+            self.send_datagram(sn(command='store', args=sn(record=record)), (self.next.ipv4, self.next.port), supress=False)
+        return self.success((self.prev.ipv4, self.prev.port))
 
-
-    def dht_complete(self):
-        request = sn(command='dht-complete', args=sn(user_name=user_name))
-        self.sock.sendto(pickle.dumps(request), (args.host, args.host_port))
-        response = self.sock.recv(1024)
-        data = pickle.loads(response)
-        print(data.status)
 
 parser = argparse.ArgumentParser(description='Client process that tracks teh state of clients')
 

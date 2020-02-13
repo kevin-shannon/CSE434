@@ -21,13 +21,20 @@ class HashTable:
 
     def add(self, record):
         i = self.search(record['Long Name'], skip_tombstone=False)
+        if i is None:
+            return
         self.table[i] = HashEntry(record)
 
     def remove(self, key):
-        self.table[self.search(key)] = HashEntry(tombstone=True)
+        i = self.search(key)
+        if i is None:
+            return
+        self.table[i] = HashEntry(tombstone=True)
 
     def lookup(self, key):
         i = self.search(key)
+        if i is None:
+            return
         return self.table[i].record if self.table[i].key == key else None
 
 class HashEntry:
