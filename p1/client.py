@@ -70,14 +70,15 @@ class Client:
     def display_help(self):
         print('\nAvailable commands:')
         print('help')
-        print('register <user-name> <port>')
+        print('register <user-name>')
         print('setup-dht <n> <user-name>')
         print('query-dht <user-name>')
         print('exit\n')
 
-    def register(self, user_name, port):
-        if self.send_datagram(sn(command='register', args=sn(user_name=user_name, port=int(port)))):
-            start_new_thread(self.listen, (int(port),))
+    def register(self, user_name):
+        user = self.send_datagram(sn(command='register', args=sn(user_name=user_name, port=int(port))))
+        if user:
+            start_new_thread(self.listen, (user.body.port,))
 
     def setup_dht(self, n, user_name):
         response = self.send_datagram(sn(command='setup-dht', args=sn(n=int(n), user_name=user_name)))

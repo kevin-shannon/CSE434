@@ -28,7 +28,7 @@ class Server:
 
     def lookup(self):
         for user in self.users:
-            if self.users[user].ipv4 == self.addr[0] and self.users[user].user_name == self.data.args.user_name:
+            if self.users[user].ipv4 == self.addr[0] and self.users[user].port == self.addr[1]:
                 return user
         return self.failure()
 
@@ -42,8 +42,8 @@ class Server:
             # User is unique and valid, add to registered users
             self.users[self.data.args.user_name] = User(**self.data.args.__dict__, ipv4=self.addr[0])
             self.state[self.data.args.user_name] = 'Free'
-            print(f'Successfully registered user: {User(**self.data.args.__dict__, ipv4=self.addr[0])}')
-            self.success()
+            print(f'Successfully registered user: {self.users[self.data.args.user_name]}')
+            self.success(self.users[self.data.args.user_name])
         elif self.data.command == 'setup-dht':
             self.leader = self.lookup()
             if (self.users.get(self.leader) is None or self.data.args.n < 2
