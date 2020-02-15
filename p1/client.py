@@ -70,24 +70,23 @@ class Client:
     def display_help(self):
         print('\nAvailable commands:')
         print('help')
-        print('register <user-name>')
-        print('setup-dht <n> <user-name>')
+        print('register <user-name> <port>')
+        print('setup-dht <n>')
         print('query-dht <user-name>')
         print('exit\n')
 
-    def register(self, user_name):
-        user = self.send_datagram(sn(command='register', args=sn(user_name=user_name, port=int(port))))
+    def register(self, user_name, in_port):
+        user = self.send_datagram(sn(command='register', args=sn(user_name=user_name, in_port=int(in_port))))
         if user:
-            start_new_thread(self.listen, (user.body.port,))
+            start_new_thread(self.listen, (int(in_port),))
 
-    def setup_dht(self, n, user_name):
-        response = self.send_datagram(sn(command='setup-dht', args=sn(n=int(n), user_name=user_name)))
+    def setup_dht(self, n):
+        response = self.send_datagram(sn(command='setup-dht', args=sn(n=int(n),)))
         if response:
             n = len(response.body)
             for i in range(1, n):
                 payload = sn(command='set-id', args=sn(i=i, n=n, prev=response.body[(i-1) % n], next=response.body[(i+1) % n]))
-                addr = (response.body[i].ipv4, response.body[i].port)
-                self.send_datagram(payload=payload, addr=addr, supress = True)
+                self.send_datagram(payload=payload, addr=response.body[i].addr, supress = True)
             self.i = 0
             self.n = n
             self.prev = response.body[-1 % n]
@@ -102,7 +101,7 @@ class Client:
                     if self.i == id:
                         self.hash_table.add(record)
                     else:
-                        print(f'sending record to {(self.next.ipv4, self.next.port)}')
+                        print(f'sending record to {self.next.addr}')
                         self.store(record)
 
             print('complete')
@@ -113,12 +112,12 @@ class Client:
         if self.i == id:
             self.hash_table.add(record)
         else:
-            print(f'sending record to {(self.next.ipv4, self.next.port)}')
-            self.send_datagram(sn(command='store', args=sn(record=record)), (self.next.ipv4, self.next.port), supress=False)
+            print(f'sending record to {self.next.addr}')
+            self.send_datagram(sn(command='store', args=sn(record=record)), addr=(self.next.addr.ipv4, self.next.in_port), supress=False)
         return self.success((self.prev.ipv4, self.prev.port))
 
 
-parser = argparse.ArgumentParser(description='Client process that tracks teh state of clients')
+parser = argparse.ArgumentParser(description='Client process that tracks the state of clients')
 
 parser.add_argument('-host',                required=True,
                                             help='ip address of host server.')
@@ -127,5 +126,6 @@ parser.add_argument('--host_port', '-hp',   type=int,
                                             help='port to talk to server on.')
 
 args = parser.parse_args()
-User = namedtuple('User', 'user_name ipv4 port')
+User = namedtuple('User', 'user_name addr in_port')
+Addr = namedtuple('Addr', 'ipv4 port')
 Client()

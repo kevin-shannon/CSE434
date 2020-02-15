@@ -28,22 +28,22 @@ class Server:
 
     def lookup(self):
         for user in self.users:
-            if self.users[user].ipv4 == self.addr[0] and self.users[user].port == self.addr[1]:
+            if self.users[user].addr == self.addr:
                 return user
         return self.failure()
 
     def handle_datagram(self):
         if self.data.command == 'register':
-            if self.data.args.port > 65535 or len(self.data.args.user_name) > 15:
+            if len(self.data.args.user_name) > 15:
                 return self.failure()
-            for user in self.users:
-                if user == self.data.args.user_name or self.users[user].port == self.data.args.port:
-                    return self.failure()
+            user = User(**self.data.args.__dict__, addr=Addr(*self.addr))
+            if user in self.users:
+                return self.failure()
             # User is unique and valid, add to registered users
-            self.users[self.data.args.user_name] = User(**self.data.args.__dict__, ipv4=self.addr[0])
+            self.users[self.data.args.user_name] = user
             self.state[self.data.args.user_name] = 'Free'
-            print(f'Successfully registered user: {self.users[self.data.args.user_name]}')
-            self.success(self.users[self.data.args.user_name])
+            print(f'Successfully registered user: {user}')
+            self.success()
         elif self.data.command == 'setup-dht':
             self.leader = self.lookup()
             if (self.users.get(self.leader) is None or self.data.args.n < 2
@@ -52,12 +52,13 @@ class Server:
                 return self.failure()
             # Begin setup of DHT
             self.state[self.leader] = 'Leader'
-            dht_users = [self.data.args.user_name]
+            dht_users = [self.leader]
             for _ in range(1, self.data.args.n):
                 random_free_user = random.choice([user for user in self.state if self.state[user] == 'Free'])
                 dht_users.append(random_free_user)
                 self.state[random_free_user] = 'InDHT'
             self.num_DHTs += 1
+            print(self.users)
             self.success(body=[self.users[user] for user in dht_users])
             while True:
                 bytes, self.addr = self.sock.recvfrom(1024)
@@ -69,12 +70,13 @@ class Server:
                     return self.failure()
 
 
-parser = argparse.ArgumentParser(description='Server process that tracks teh state of clients')
+parser = argparse.ArgumentParser(description='Server process that tracks the state of clients')
 
 parser.add_argument('--port', '-p',     type=int,
                                         default=25565,
                                         help='port to listen on.')
 
 args = parser.parse_args()
-User = namedtuple('User', 'user_name ipv4 port')
+User = namedtuple('User', 'user_name addr in_port')
+Addr = namedtuple('Addr', 'ipv4 port')
 Server()
