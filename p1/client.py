@@ -21,10 +21,10 @@ class Client:
             self.interpret_command(command)
 
     def success(self, addr, body=None):
-        self.sock.sendto(pickle.dumps(sn(status='SUCCESS', body=body)), addr)
+        self.sock.sendto(pickle.dumps(sn(type='response', status='SUCCESS', body=body)), addr)
 
     def failure(self, addr):
-        self.sock.sendto(pickle.dumps(sn(status='FAILURE', body=None)), addr)
+        self.sock.sendto(pickle.dumps(sn(type='response', status='FAILURE', body=None)), addr)
 
     def listen(self, port):
         sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
@@ -35,7 +35,7 @@ class Client:
             print('Received', data)
             self.handle_datagram(data)
 
-    def send_datagram(self, payload, addr=None, supress=False):
+    def send_datagram(self, payload, type='request', addr=None, supress=False):
         addr = addr if addr is not None else (args.host, args.host_port)
         self.sock.sendto(pickle.dumps(payload), addr)
         response = pickle.loads(self.sock.recv(1024))
@@ -44,12 +44,14 @@ class Client:
         return response if response.status == 'SUCCESS' else None
 
     def handle_datagram(self, data):
+        if data.type == 'response':
+            return
         if data.command == 'set-id':
             self.i = data.args.i
             self.n = data.args.n
             self.prev = data.args.prev
             self.next = data.args.next
-            return self.success((self.prev.ipv4, self.prev.port))
+            return self.success((self.prev.addr.ipv4, self.prev.in_port))
         if data.command == 'store':
             self.store(data.args.record)
 
@@ -86,7 +88,8 @@ class Client:
             n = len(response.body)
             for i in range(1, n):
                 payload = sn(command='set-id', args=sn(i=i, n=n, prev=response.body[(i-1) % n], next=response.body[(i+1) % n]))
-                self.send_datagram(payload=payload, addr=response.body[i].addr, supress = True)
+                print('setting', i)
+                self.send_datagram(payload=payload, addr=(response.body[i].addr.ipv4, response.body[i].in_port), supress=True)
             self.i = 0
             self.n = n
             self.prev = response.body[-1 % n]
@@ -97,6 +100,7 @@ class Client:
                 reader = csv.DictReader(f)
                 for row in reader:
                     record = dict(row)
+                    print(record)
                     id = self.hash_table.hash_func(record['Long Name']) % self.n
                     if self.i == id:
                         self.hash_table.add(record)
@@ -113,7 +117,7 @@ class Client:
             self.hash_table.add(record)
         else:
             print(f'sending record to {self.next.addr}')
-            self.send_datagram(sn(command='store', args=sn(record=record)), addr=(self.next.addr.ipv4, self.next.in_port), supress=False)
+            self.send_datagram(sn(command='store', args=sn(record=record)), addr=(self.next.addr.ipv4, self.next.in_port))
         return self.success((self.prev.ipv4, self.prev.port))
 
 
