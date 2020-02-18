@@ -32,14 +32,13 @@ class Client:
         while True:
             raw_bytes, addr = sock.recvfrom(1024)
             data = pickle.loads(raw_bytes)
-            print('Received', data)
             self.handle_datagram(data)
 
-    def send_datagram(self, payload, addr=None, supress=False):
+    def send_datagram(self, payload, addr=None, suppress=False):
         addr = addr if addr is not None else (args.host, args.host_port)
         self.sock.sendto(pickle.dumps(payload), addr)
         response = pickle.loads(self.sock.recv(1024))
-        if not supress:
+        if not suppress:
             print(response.status)
         return response if response.status == 'SUCCESS' else None
 
@@ -88,37 +87,30 @@ class Client:
             n = len(response.body)
             for i in range(1, n):
                 payload = sn(type='request', command='set-id', args=sn(i=i, n=n, prev=response.body[(i-1) % n], next=response.body[(i+1) % n]))
-                print('setting', i)
-                self.send_datagram(payload=payload, addr=(response.body[i].addr.ipv4, response.body[i].in_port), supress=True)
+                self.send_datagram(payload=payload, addr=(response.body[i].addr.ipv4, response.body[i].in_port), suppress=True)
             self.i = 0
             self.n = n
             self.prev = response.body[-1 % n]
             self.next = response.body[1]
-            print('reading csv')
 
             with open('StatsCountry.csv') as f:
                 reader = csv.DictReader(f)
                 for row in reader:
                     record = dict(row)
-                    print(record)
                     id = self.hash_table.hash_func(record['Long Name']) % self.n
                     if self.i == id:
                         self.hash_table.add(record)
                     else:
-                        print(f'sending record to {self.next.addr}')
                         self.store(record)
 
-            print('complete')
-            print(self.hash_table)
-            self.send_datagram(sn(command='dht-complete', args=None))
+            self.send_datagram(sn(command='dht-complete', args=None), suppress=True)
 
     def store(self, record):
         id = self.hash_table.hash_func(record['Long Name']) % self.n
         if self.i == id:
             self.hash_table.add(record)
         else:
-            print(f'sending record to {self.next.addr}')
-            self.send_datagram(sn(type='request', command='store', args=sn(record=record)), addr=(self.next.addr.ipv4, self.next.in_port))
+            self.send_datagram(sn(type='request', command='store', args=sn(record=record)), addr=(self.next.addr.ipv4, self.next.in_port), suppress=True)
         return self.success(self.prev.addr)
 
 
