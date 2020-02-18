@@ -35,7 +35,7 @@ class Client:
             print('Received', data)
             self.handle_datagram(data)
 
-    def send_datagram(self, payload, type='request', addr=None, supress=False):
+    def send_datagram(self, payload, addr=None, supress=False):
         addr = addr if addr is not None else (args.host, args.host_port)
         self.sock.sendto(pickle.dumps(payload), addr)
         response = pickle.loads(self.sock.recv(1024))
@@ -51,7 +51,7 @@ class Client:
             self.n = data.args.n
             self.prev = data.args.prev
             self.next = data.args.next
-            return self.success((self.prev.addr.ipv4, self.prev.in_port))
+            return self.success(self.prev.addr)
         if data.command == 'store':
             self.store(data.args.record)
 
@@ -87,7 +87,7 @@ class Client:
         if response:
             n = len(response.body)
             for i in range(1, n):
-                payload = sn(command='set-id', args=sn(i=i, n=n, prev=response.body[(i-1) % n], next=response.body[(i+1) % n]))
+                payload = sn(type='request', command='set-id', args=sn(i=i, n=n, prev=response.body[(i-1) % n], next=response.body[(i+1) % n]))
                 print('setting', i)
                 self.send_datagram(payload=payload, addr=(response.body[i].addr.ipv4, response.body[i].in_port), supress=True)
             self.i = 0
@@ -109,6 +109,7 @@ class Client:
                         self.store(record)
 
             print('complete')
+            print(self.hash_table)
             self.send_datagram(sn(command='dht-complete', args=None))
 
     def store(self, record):
@@ -117,8 +118,8 @@ class Client:
             self.hash_table.add(record)
         else:
             print(f'sending record to {self.next.addr}')
-            self.send_datagram(sn(command='store', args=sn(record=record)), addr=(self.next.addr.ipv4, self.next.in_port))
-        return self.success((self.prev.ipv4, self.prev.port))
+            self.send_datagram(sn(type='request', command='store', args=sn(record=record)), addr=(self.next.addr.ipv4, self.next.in_port))
+        return self.success(self.prev.addr)
 
 
 parser = argparse.ArgumentParser(description='Client process that tracks the state of clients')
