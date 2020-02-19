@@ -53,6 +53,8 @@ class Client:
             return self.success(self.prev.addr)
         if data.command == 'store':
             self.store(data.args.record)
+        if data.command == 'query':
+            self.query(data.args.long_name, data.args.u_addr)
 
     def interpret_command(self, command):
         if command == 'exit':
@@ -66,7 +68,7 @@ class Client:
             elif command_split[0] == 'setup-dht':
                 self.setup(*command_split[1:])
             elif command_split[0] == 'query-dht':
-                self.query(*command_split[1:])
+                self.query_dht(' '.join(command_split[1:]))
             else:
                 print("Command not understood, try again.")
 
@@ -86,7 +88,6 @@ class Client:
     def setup(self, n):
         response = self.send_datagram(sn(command='setup-dht', args=sn(n=int(n),)))
         if response:
-            print(response)
             n = len(response.body)
             for i in range(1, n):
                 payload = sn(type='request', command='set-id', args=sn(i=i, n=n, prev=response.body[(i-1) % n], next=response.body[(i+1) % n]))
@@ -112,12 +113,23 @@ class Client:
             self.send_datagram(sn(type='request', command='store', args=sn(record=record)), addr=(self.next.addr.ipv4, self.next.in_port), suppress=True)
         return self.success(self.prev.addr)
 
-    def query(self, long_name):
+    def query_dht(self, long_name):
         response = self.send_datagram(sn(command='query-dht', args=None))
         if response:
-            print(response)
-            user = response.body
-            print(user)
+            record = self.send_datagram(sn(type='request', command='query', args=sn(long_name=long_name, u_addr=self.sock.getsockname())), addr=(response.body.addr.ipv4, response.body.in_port), suppress=True)
+            print(record)
+
+    def query(self, long_name, u_addr):
+        id = self.hash_table.hash_func(long_name) % self.n
+        print(self.i, id)
+        if self.i == id:
+            record = self.hash_table.lookup(long_name)
+            return self.success(u_addr, body=record)
+        else:
+            response = self.send_datagram(sn(type='request', command='query', args=sn(long_name=long_name, u_addr=u_addr)), addr=(self.next.addr.ipv4, self.next.in_port), suppress=True)
+            return self.success(self.prev.addr)
+
+
 
 parser = argparse.ArgumentParser(description='Client process that tracks the state of clients')
 
