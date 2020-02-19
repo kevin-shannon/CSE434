@@ -10,13 +10,13 @@ class Server:
     def __init__(self):
         self.users = {}
         self.state = {}
-        self.blocking = False
         self.num_DHTs = 0
+        self.free, self.in_dht, self.leader = 'Free', 'InDHT', 'Leader'
         self.sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         self.sock.bind((socket.gethostname(), args.port))
         while True:
             bytes, self.out_addr = self.sock.recvfrom(1024)
-            print('Receiving data from', self.out_addr)
+            print('Received data from', self.out_addr)
             self.data = pickle.loads(bytes)
             self.handle_datagram()
 
@@ -42,21 +42,21 @@ class Server:
                 return self.failure()
             # User is unique and valid, add to registered users
             self.users[self.data.args.user_name] = user
-            self.state[self.data.args.user_name] = 'Free'
+            self.state[self.data.args.user_name] = self.free
             print(f'Successfully registered user: {user}')
             return self.success()
         elif self.data.command == 'setup-dht':
-            self.leader = self.lookup()
-            if (self.users.get(self.leader) is None or self.data.args.n < 2
+            leader = self.lookup()
+            if (self.users.get(leader) is None or self.data.args.n < 2
                 or len(self.users) < self.data.args.n or self.num_DHTs > 0):
                 return self.failure()
             # Begin setup of DHT
-            self.state[self.leader] = 'Leader'
-            dht_users = [self.leader]
+            self.state[leader] = self.leader
+            dht_users = [leader]
             for _ in range(1, self.data.args.n):
-                random_free_user = random.choice([user for user in self.state if self.state[user] == 'Free'])
+                random_free_user = random.choice([user for user in self.state if self.state[user] == self.free])
                 dht_users.append(random_free_user)
-                self.state[random_free_user] = 'InDHT'
+                self.state[random_free_user] = self.in_dht
             self.num_DHTs += 1
             self.success(body=[self.users[user] for user in dht_users])
             # Wait for Leader to send dht-complete
@@ -64,7 +64,7 @@ class Server:
                 bytes, self.out_addr = self.sock.recvfrom(1024)
                 print('Received data from', self.out_addr)
                 self.data = pickle.loads(bytes)
-                if self.data.command == 'dht-complete' and self.lookup() == self.leader:
+                if self.data.command == 'dht-complete' and self.lookup() == leader:
                     return self.success()
                 else:
                     return self.failure()
@@ -72,12 +72,13 @@ class Server:
             if self.num_DHTs == 0:
                 return self.failure()
             user = self.lookup()
-            if user is None or self.state[user] != 'Free':
+            if user is None or self.state[user] != self.free:
                 return self.failure()
-            random_user = random.choice([user for user in self.state if self.state[user] != 'Free'])
+            random_user = random.choice([user for user in self.state if self.state[user] != self.free])
             return self.success(self.users[random_user])
 
 
+# Useage: python3 server.py --host_port 25565
 parser = argparse.ArgumentParser(description='Server process that tracks the state of clients')
 
 parser.add_argument('--port', '-p',     type=int,

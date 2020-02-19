@@ -126,6 +126,7 @@ class Client:
             self.sock.sendto(pickle.dumps(payload), self.next.recv_addr)
 
 
+# Useage: python3 client.py -host 100.64.15.69 --host_port 25565
 parser = argparse.ArgumentParser(description='Client process that tracks the state of clients')
 
 parser.add_argument('-host',                required=True,
