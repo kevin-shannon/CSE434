@@ -30,11 +30,11 @@ class Server:
         for user in self.users:
             if self.users[user].addr == self.addr:
                 return user
-        return self.failure()
+        return None
 
     def handle_datagram(self):
         if self.data.command == 'register':
-            if len(self.data.args.user_name) > 15:
+            if len(self.data.args.user_name) > 15 or self.data.args.in_port > 65535:
                 return self.failure()
             user = User(**self.data.args.__dict__, addr=Addr(*self.addr))
             if user in self.users:
@@ -43,12 +43,11 @@ class Server:
             self.users[self.data.args.user_name] = user
             self.state[self.data.args.user_name] = 'Free'
             print(f'Successfully registered user: {user}')
-            self.success()
+            return self.success()
         elif self.data.command == 'setup-dht':
             self.leader = self.lookup()
             if (self.users.get(self.leader) is None or self.data.args.n < 2
                 or len(self.users) < self.data.args.n or self.num_DHTs > 0):
-                print('failed prelim')
                 return self.failure()
             # Begin setup of DHT
             self.state[self.leader] = 'Leader'
@@ -58,8 +57,8 @@ class Server:
                 dht_users.append(random_free_user)
                 self.state[random_free_user] = 'InDHT'
             self.num_DHTs += 1
-            print(self.users)
             self.success(body=[self.users[user] for user in dht_users])
+            # Wait for Leader to send dht-complete
             while True:
                 bytes, self.addr = self.sock.recvfrom(1024)
                 print('Receiving data from', self.addr)
@@ -68,6 +67,14 @@ class Server:
                     return self.success()
                 else:
                     return self.failure()
+        elif self.data.command == 'query-dht':
+            if self.num_DHTs == 0:
+                return self.failure()
+            user = self.lookup()
+            if user is None or self.state[user] != 'Free':
+                return self.failure()
+            random_user = random.choice([user for user in self.state if self.state[user] != 'Free'])
+            return self.success(self.users[random_user])
 
 
 parser = argparse.ArgumentParser(description='Server process that tracks the state of clients')

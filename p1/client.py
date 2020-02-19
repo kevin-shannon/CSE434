@@ -64,7 +64,9 @@ class Client:
             if command_split[0] == 'register':
                 self.register(*command_split[1:])
             elif command_split[0] == 'setup-dht':
-                self.setup_dht(*command_split[1:])
+                self.setup(*command_split[1:])
+            elif command_split[0] == 'query-dht':
+                self.query(*command_split[1:])
             else:
                 print("Command not understood, try again.")
 
@@ -73,7 +75,7 @@ class Client:
         print('help')
         print('register <user-name> <port>')
         print('setup-dht <n>')
-        print('query-dht <user-name>')
+        print('query-dht <long-name>')
         print('exit\n')
 
     def register(self, user_name, in_port):
@@ -81,9 +83,10 @@ class Client:
         if user:
             start_new_thread(self.listen, (int(in_port),))
 
-    def setup_dht(self, n):
+    def setup(self, n):
         response = self.send_datagram(sn(command='setup-dht', args=sn(n=int(n),)))
         if response:
+            print(response)
             n = len(response.body)
             for i in range(1, n):
                 payload = sn(type='request', command='set-id', args=sn(i=i, n=n, prev=response.body[(i-1) % n], next=response.body[(i+1) % n]))
@@ -97,11 +100,7 @@ class Client:
                 reader = csv.DictReader(f)
                 for row in reader:
                     record = dict(row)
-                    id = self.hash_table.hash_func(record['Long Name']) % self.n
-                    if self.i == id:
-                        self.hash_table.add(record)
-                    else:
-                        self.store(record)
+                    self.send_datagram(sn(type='request', command='store', args=sn(record=record)), addr=(self.next.addr.ipv4, self.next.in_port), suppress=True)
 
             self.send_datagram(sn(command='dht-complete', args=None), suppress=True)
 
@@ -113,6 +112,12 @@ class Client:
             self.send_datagram(sn(type='request', command='store', args=sn(record=record)), addr=(self.next.addr.ipv4, self.next.in_port), suppress=True)
         return self.success(self.prev.addr)
 
+    def query(self, long_name):
+        response = self.send_datagram(sn(command='query-dht', args=None))
+        if response:
+            print(response)
+            user = response.body
+            print(user)
 
 parser = argparse.ArgumentParser(description='Client process that tracks the state of clients')
 
