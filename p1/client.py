@@ -20,12 +20,6 @@ class Client:
             command = input('enter command: ')
             self.interpret_command(command)
 
-    def success(self, addr, body=None):
-        self.sock.sendto(pickle.dumps(sn(type='response', status='SUCCESS', body=body)), addr)
-
-    def failure(self, addr):
-        self.sock.sendto(pickle.dumps(sn(type='response', status='FAILURE', body=None)), addr)
-
     def listen(self, port):
         sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         sock.bind((socket.gethostname(), port))
@@ -34,23 +28,19 @@ class Client:
             data = pickle.loads(raw_bytes)
             self.handle_datagram(data)
 
-    def send_datagram(self, payload, addr=None, suppress=False):
+    def send_datagram(self, payload, addr=None):
         addr = addr if addr is not None else (args.host, args.host_port)
         self.sock.sendto(pickle.dumps(payload), addr)
         response = pickle.loads(self.sock.recv(1024))
-        if not suppress:
-            print(response.status)
+        print(response.status)
         return response if response.status == 'SUCCESS' else None
 
     def handle_datagram(self, data):
-        if data.type == 'response':
-            return
         if data.command == 'set-id':
             self.i = data.args.i
             self.n = data.args.n
             self.prev = data.args.prev
             self.next = data.args.next
-            return self.success(self.prev.addr)
         if data.command == 'store':
             self.store(data.args.record)
         if data.command == 'query':
@@ -90,8 +80,8 @@ class Client:
         if response:
             n = len(response.body)
             for i in range(1, n):
-                payload = sn(type='request', command='set-id', args=sn(i=i, n=n, prev=response.body[(i-1) % n], next=response.body[(i+1) % n]))
-                self.send_datagram(payload=payload, addr=(response.body[i].addr.ipv4, response.body[i].in_port), suppress=True)
+                payload = sn(command='set-id', args=sn(i=i, n=n, prev=response.body[(i-1) % n], next=response.body[(i+1) % n]))
+                self.sock.sendto(pickle.dumps(payload), (response.body[i].addr.ipv4, response.body[i].in_port))
             self.i = 0
             self.n = n
             self.prev = response.body[-1 % n]
@@ -101,22 +91,24 @@ class Client:
                 reader = csv.DictReader(f)
                 for row in reader:
                     record = dict(row)
-                    self.send_datagram(sn(type='request', command='store', args=sn(record=record)), addr=(self.next.addr.ipv4, self.next.in_port), suppress=True)
+                    payload = sn(command='store', args=sn(record=record))
+                    self.sock.sendto(pickle.dumps(payload), (self.next.addr.ipv4, self.next.in_port))
 
-            self.send_datagram(sn(command='dht-complete', args=None), suppress=True)
+            self.send_datagram(sn(command='dht-complete', args=None))
 
     def store(self, record):
         id = self.hash_table.hash_func(record['Long Name']) % self.n
         if self.i == id:
             self.hash_table.add(record)
         else:
-            self.send_datagram(sn(type='request', command='store', args=sn(record=record)), addr=(self.next.addr.ipv4, self.next.in_port), suppress=True)
-        return self.success(self.prev.addr)
+            payload = sn(command='store', args=sn(record=record))
+            self.sock.sendto(pickle.dumps(payload), (self.next.addr.ipv4, self.next.in_port))
 
     def query_dht(self, long_name):
         response = self.send_datagram(sn(command='query-dht', args=None))
         if response:
-            record = self.send_datagram(sn(type='request', command='query', args=sn(long_name=long_name, u_addr=self.sock.getsockname())), addr=(response.body.addr.ipv4, response.body.in_port), suppress=True)
+            payload = sn(command='query', args=sn(long_name=long_name, u_addr=self.sock.getsockname())
+            record = self.send_datagram(payload, addr=(response.body.addr.ipv4, response.body.in_port)).body
             print(record)
 
     def query(self, long_name, u_addr):
@@ -124,11 +116,10 @@ class Client:
         print(self.i, id)
         if self.i == id:
             record = self.hash_table.lookup(long_name)
-            return self.success(u_addr, body=record)
+            self.sock.sendto(pickle.dumps(sn(status='SUCCESS', body=record)), u_addr)
         else:
-            response = self.send_datagram(sn(type='request', command='query', args=sn(long_name=long_name, u_addr=u_addr)), addr=(self.next.addr.ipv4, self.next.in_port), suppress=True)
-            return self.success(self.prev.addr)
-
+            payload = sn(command='query', args=sn(long_name=long_name, u_addr=u_addr))
+            self.sock.sendto(pickle.dumps(payload), (self.next.addr.ipv4, self.next.in_port))
 
 
 parser = argparse.ArgumentParser(description='Client process that tracks the state of clients')
