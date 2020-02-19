@@ -15,28 +15,29 @@ class Server:
         self.sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         self.sock.bind((socket.gethostname(), args.port))
         while True:
-            bytes, self.addr = self.sock.recvfrom(1024)
-            print('Receiving data from', self.addr)
+            bytes, self.out_addr = self.sock.recvfrom(1024)
+            print('Receiving data from', self.out_addr)
             self.data = pickle.loads(bytes)
             self.handle_datagram()
 
     def failure(self):
-        self.sock.sendto(pickle.dumps(sn(status='FAILURE', body=None)), self.addr)
+        self.sock.sendto(pickle.dumps(sn(status='FAILURE', body=None)), self.out_addr)
 
     def success(self, body=None):
-        self.sock.sendto(pickle.dumps(sn(status='SUCCESS', body=body)), self.addr)
+        self.sock.sendto(pickle.dumps(sn(status='SUCCESS', body=body)), self.out_addr)
 
     def lookup(self):
         for user in self.users:
-            if self.users[user].addr == self.addr:
+            if self.users[user].out_addr == self.out_addr:
                 return user
         return None
 
     def handle_datagram(self):
         if self.data.command == 'register':
-            if len(self.data.args.user_name) > 15 or self.data.args.in_port > 65535:
+            if len(self.data.args.user_name) > 15 or self.data.args.port > 65535:
                 return self.failure()
-            user = User(**self.data.args.__dict__, addr=Addr(*self.addr))
+            # Create User namedtuple
+            user = User(self.data.args.user_name, self.out_addr, (self.out_addr[0], self.data.args.port))
             if user in self.users:
                 return self.failure()
             # User is unique and valid, add to registered users
@@ -60,8 +61,8 @@ class Server:
             self.success(body=[self.users[user] for user in dht_users])
             # Wait for Leader to send dht-complete
             while True:
-                bytes, self.addr = self.sock.recvfrom(1024)
-                print('Receiving data from', self.addr)
+                bytes, self.out_addr = self.sock.recvfrom(1024)
+                print('Received data from', self.out_addr)
                 self.data = pickle.loads(bytes)
                 if self.data.command == 'dht-complete' and self.lookup() == self.leader:
                     return self.success()
@@ -84,6 +85,5 @@ parser.add_argument('--port', '-p',     type=int,
                                         help='port to listen on.')
 
 args = parser.parse_args()
-User = namedtuple('User', 'user_name addr in_port')
-Addr = namedtuple('Addr', 'ipv4 port')
+User = namedtuple('User', 'user_name out_addr recv_addr')
 Server()
