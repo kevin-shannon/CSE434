@@ -47,7 +47,7 @@ class Server:
         '''
         Sends a FAILURE response to self.out_addr.
         '''
-        self.sock.sendto(pickle.dumps(sn(status='FAILURE', body=body)), self.out_addr)
+        self.sock.sendto(pickle.dumps(sn(status='FAILURE', body=None)), self.out_addr)
 
     def success(self, body=None):
         '''

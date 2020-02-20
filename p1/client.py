@@ -260,7 +260,9 @@ class Client:
             payload = sn(command='query', args=sn(long_name=long_name, u_addr=u_addr))
             self.sock.sendto(pickle.dumps(payload), self.next.recv_addr)
 
+
 User = namedtuple('User', 'user_name out_addr recv_addr')
+
 if __name__ == '__main__':
     # Useage: python3 client.py -i 100.64.15.69 --p 25565
     parser = argparse.ArgumentParser(description='Client process that tracks the state of clients')
