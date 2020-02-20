@@ -26,7 +26,7 @@ class Client:
         The socket object used for communication.
     host_addr : tuple
         The address of the server.
-    sta_file : str
+    stat_file : str
         Path to stats file.
     hash_table : utils.HashTable.HashTable
         Client's portion of the DHT.
@@ -38,6 +38,15 @@ class Client:
         The previous User.
     next : __main__.User
         The next User.
+
+    Parameters
+    ----------
+    host_ip : str
+        The IP address that the server is running on.
+    host_port : int
+        The port that the server is listening on.
+    stat_file : str
+        Path to stats file.
     '''
 
     def __init__(self, host_ip, host_port, stat_file):
@@ -253,7 +262,7 @@ class Client:
 
 User = namedtuple('User', 'user_name out_addr recv_addr')
 if __name__ == '__main__':
-    # Useage: python3 client.py -host 100.64.15.69 --host_port 25565
+    # Useage: python3 client.py -i 100.64.15.69 --p 25565
     parser = argparse.ArgumentParser(description='Client process that tracks the state of clients')
 
     parser.add_argument('--host_ip', '-i',      required=True,
