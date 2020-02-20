@@ -36,10 +36,12 @@ class Server:
         if self.data.command == 'register':
             if len(self.data.args.user_name) > 15 or self.data.args.port > 65535:
                 return self.failure()
-            # Create User namedtuple
             user = User(self.data.args.user_name, self.out_addr, (self.out_addr[0], self.data.args.port))
-            if user in self.users:
-                return self.failure()
+            # Check if any fields are identical to any fields already registered
+            for field in User._fields:
+                for name in self.users:
+                    if self.users[name].__getattribute__(field) == user.__getattribute__(field):
+                        return self.failure()
             # User is unique and valid, add to registered users
             self.users[self.data.args.user_name] = user
             self.state[self.data.args.user_name] = self.free
