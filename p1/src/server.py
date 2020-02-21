@@ -36,7 +36,12 @@ class Server:
         self.state = {}
         self.num_DHTs = 0
         self.sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        self.sock.bind((socket.gethostname(), port))
+        try:
+            self.sock.bind((socket.gethostname(), port))
+        except:
+            s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+            s.connect(("8.8.8.8", 80))
+            self.sock.bind((s.getsockname()[0], port))
         while True:
             bytes, self.out_addr = self.sock.recvfrom(1024)
             print('Received data from', self.out_addr)

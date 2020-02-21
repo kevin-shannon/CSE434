@@ -71,7 +71,12 @@ class Client:
             The port to listen on.
         '''
         sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        sock.bind((socket.gethostname(), port))
+        try:
+            sock.bind((socket.gethostname(), port))
+        except:
+            s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+            s.connect(("8.8.8.8", 80))
+            sock.bind((s.getsockname()[0], port))
         while True:
             raw_bytes, addr = sock.recvfrom(1024)
             data = pickle.loads(raw_bytes)
