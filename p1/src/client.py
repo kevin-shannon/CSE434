@@ -7,6 +7,7 @@ import sys
 from _thread import start_new_thread
 from collections import namedtuple
 from os import getcwd
+from os.path import dirname
 from os.path import join
 from types import SimpleNamespace as sn
 from utils.HashTable import HashEntry
@@ -270,7 +271,7 @@ if __name__ == '__main__':
     parser.add_argument('--host_port', '-p',    type=int,
                                                 default=25565,
                                                 help='port to talk to server on.')
-    parser.add_argument('--stat_file', '-f',    default=join(getcwd(), 'StatsCountry.csv'),
+    parser.add_argument('--stat_file', '-f',    default=join(dirname(getcwd()), 'data', 'StatsCountry.csv'),
                                                 help='path to stats file.')
 
     args = parser.parse_args()
