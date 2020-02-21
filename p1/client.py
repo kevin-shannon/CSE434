@@ -115,9 +115,9 @@ class Client:
             self.prev = data.args.prev
             self.next = data.args.next
         if data.command == 'store':
-            self.store(data.args.record)
+            self.store(**data.args.__dict__)
         if data.command == 'query':
-            self.query(data.args.long_name, data.args.u_addr)
+            self.query(**data.args.__dict__)
 
     def interpret_command(self, command):
         '''
@@ -137,7 +137,7 @@ class Client:
             if command_split[0] == 'register':
                 self.register(*command_split[1:])
             elif command_split[0] == 'setup-dht':
-                self.setup(*command_split[1:])
+                self.setup_dht(*command_split[1:])
             elif command_split[0] == 'query-dht':
                 self.query_dht(' '.join(command_split[1:]))
             else:
@@ -173,7 +173,7 @@ class Client:
         if response.status == 'SUCCESS':
             start_new_thread(self.listen, (int(port),))
 
-    def setup(self, n):
+    def setup_dht(self, n):
         '''
         Asks server for n-1 other free users then constructs a ring structure and builds
         a DHT amongst the n nodes.
@@ -197,9 +197,7 @@ class Client:
             with open(self.stat_file) as f:
                 reader = csv.DictReader(f)
                 for row in reader:
-                    record = dict(row)
-                    payload = sn(command='store', args=sn(record=record))
-                    self.sock.sendto(pickle.dumps(payload), self.next.recv_addr)
+                    self.store(dict(row))
 
             self.send_datagram(sn(command='dht-complete', args=None), self.host_addr)
 
