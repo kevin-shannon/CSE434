@@ -135,9 +135,7 @@ class Client:
         command : str
             The user sdin input.
         '''
-        if command == 'exit':
-            sys.exit(0)
-        elif command == 'help':
+        if command == 'help':
             self.display_help()
         else:
             command_split = command.split(' ')
@@ -149,6 +147,8 @@ class Client:
                 self.query_dht(' '.join(command_split[1:]))
             elif command_split[0] == 'leave-dht':
                 self.leave_dht()
+            elif command_split[0] == 'deregister':
+                self.deregister()
             elif command_split[0] == 'teardown-dht':
                 self.teardown_dht()
             else:
@@ -164,8 +164,8 @@ class Client:
         print('setup-dht <n>')
         print('query-dht <long-name>')
         print('leave-dht')
-        print('teardown-dht')
-        print('exit\n')
+        print('deregister')
+        print('teardown-dht\n')
 
     def register(self, user_name, port):
         '''
@@ -286,6 +286,11 @@ class Client:
 
     def leave(self):
         pass
+
+    def deregister(self):
+        response = self.send_datagram(sn(command='deregister', args=None), self.host_addr)
+        if response.status == 'SUCCESS':
+            sys.exit(0)
 
     def teardown_dht(self):
         response = self.send_datagram(sn(command='teardown-dht', args=None), self.host_addr)

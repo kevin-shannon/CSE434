@@ -107,6 +107,8 @@ class Server:
             self.query_dht()
         elif data.command == 'leave-dht':
             self.leave_dht()
+        elif data.command == 'deregister':
+            self.deregister()
         elif data.command == 'teardown-dht':
             self.teardown_dht()
 
@@ -162,6 +164,18 @@ class Server:
         self.success()
         # Wait for confirmation dht is rebuilt
         self.wait_until(command='dht-rebuilt', user=user)
+
+    def deregister(self):
+        user = self.lookup()
+        # Verify user is registered and in the DHT
+        if user is None or self.state[user] != FREE:
+            return self.failure()
+        # Delete user's state information
+        self.users.pop(user)
+        self.state.pop(user)
+        self.success()
+        print(f'Successfully purged user {user}')
+
 
     def teardown_dht(self):
         if self.num_DHTs == 0:
