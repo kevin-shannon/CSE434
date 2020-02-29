@@ -54,7 +54,7 @@ class Client:
         self.sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         self.host_addr = (host_ip, host_port)
         self.stat_file = stat_file
-        self.hash_table = HashTable(size=353)
+
         self.display_help()
         while True:
             command = input('enter command: ')
@@ -116,14 +116,15 @@ class Client:
             The data that has been received.
         '''
         if data.command == 'set-id':
-            self.i = data.args.i
-            self.n = data.args.n
-            self.prev = data.args.prev
-            self.next = data.args.next
-        if data.command == 'store':
+            self.set_id(**data.args.__dict__)
+        elif data.command == 'store':
             self.store(**data.args.__dict__)
-        if data.command == 'query':
+        elif data.command == 'query':
             self.query(**data.args.__dict__)
+        elif data.command == 'leave':
+            self.leave()
+        elif data.command == 'teardown':
+            self.teardown()
 
     def interpret_command(self, command):
         '''
@@ -146,6 +147,10 @@ class Client:
                 self.setup_dht(*command_split[1:])
             elif command_split[0] == 'query-dht':
                 self.query_dht(' '.join(command_split[1:]))
+            elif command_split[0] == 'leave-dht':
+                self.leave_dht()
+            elif command_split[0] == 'teardown-dht':
+                self.teardown_dht()
             else:
                 print("Command not understood, try again.")
 
@@ -158,6 +163,8 @@ class Client:
         print('register <user-name> <port>')
         print('setup-dht <n>')
         print('query-dht <long-name>')
+        print('leave-dht')
+        print('teardown-dht')
         print('exit\n')
 
     def register(self, user_name, port):
@@ -192,20 +199,24 @@ class Client:
         response = self.send_datagram(sn(command='setup-dht', args=sn(n=int(n),)), self.host_addr)
         if response.status == 'SUCCESS':
             n = len(response.body)
+            self.set_id(0, n, response.body[-1 % n], response.body[1])
             for i in range(1, n):
                 payload = sn(command='set-id', args=sn(i=i, n=n, prev=response.body[(i-1) % n], next=response.body[(i+1) % n]))
                 self.sock.sendto(pickle.dumps(payload), response.body[i].recv_addr)
-            self.i = 0
-            self.n = n
-            self.prev = response.body[-1 % n]
-            self.next = response.body[1]
-
+            # Read Stats File
             with open(self.stat_file) as f:
                 reader = csv.DictReader(f)
                 for row in reader:
                     self.store(dict(row))
-
+            # All done
             self.send_datagram(sn(command='dht-complete', args=None), self.host_addr)
+
+    def set_id(self, i, n, prev, next):
+        self.i = i
+        self.n = n
+        self.prev = prev
+        self.next = next
+        self.hash_table = HashTable(size=353)
 
     def store(self, record):
         '''
@@ -237,7 +248,7 @@ class Client:
         response = self.send_datagram(sn(command='query-dht', args=None), self.host_addr)
         if response.status == 'SUCCESS':
             payload = sn(command='query', args=sn(long_name=long_name, u_addr=self.sock.getsockname()))
-            record = self.send_datagram(payload, addr=response.body.recv_addr).body
+            record = self.send_datagram(payload, response.body.recv_addr).body
             print(record)
 
     def query(self, long_name, u_addr):
@@ -263,6 +274,36 @@ class Client:
         else:
             payload = sn(command='query', args=sn(long_name=long_name, u_addr=u_addr))
             self.sock.sendto(pickle.dumps(payload), self.next.recv_addr)
+
+    def leave_dht(self):
+        response = self.send_datagram(sn(command='leave-dht', args=None), self.host_addr)
+        if response.status == 'SUCCESS':
+            # Delete the DHT
+
+            # Rebuild the DHT
+
+            self.send_datagram(sn(command='dht-rebuilt', args=None), self.host_addr)
+
+    def leave(self):
+        pass
+
+    def teardown_dht(self):
+        response = self.send_datagram(sn(command='teardown-dht', args=None), self.host_addr)
+        if response.status == 'SUCCESS':
+            payload = sn(command='teardown', args=None)
+            self.send_datagram(payload, self.next.recv_addr)
+            # All done
+            self.send_datagram(sn(command='teardown-complete', args=None), self.host_addr)
+
+    def teardown(self):
+        self.hash_table = None
+        next = self.next
+        i = self.i
+        self.set_id(None, None, None, None)
+        if i == 0:
+            return self.sock.sendto(pickle.dumps(sn(status='SUCCESS', body=None)), self.sock.getsockname())
+        payload = sn(command='teardown', args=None)
+        self.sock.sendto(pickle.dumps(payload), next.recv_addr)
 
 
 User = namedtuple('User', 'user_name out_addr recv_addr')

@@ -79,6 +79,16 @@ class Server:
                 return user
         return None
 
+    def wait_until(self, command, user):
+        while True:
+            bytes, self.out_addr = self.sock.recvfrom(1024)
+            print('Received data from', self.out_addr)
+            data = pickle.loads(bytes)
+            if data.command == command and self.lookup() == user:
+                return self.success()
+            else:
+                self.failure()
+
     def handle_datagram(self, data):
         '''
         Used for handling commands from a client. Depending on the command
@@ -90,51 +100,83 @@ class Server:
             The data that has been received from the client.
         '''
         if data.command == 'register':
-            if len(data.args.user_name) > MAX_USR_LEN or data.args.port > MAX_PORT:
-                return self.failure()
-            user = User(data.args.user_name, self.out_addr, (self.out_addr[0], data.args.port))
-            # Check if any fields are identical to any fields already registered
-            for field in User._fields:
-                for name in self.users:
-                    if self.users[name].__getattribute__(field) == user.__getattribute__(field):
-                        return self.failure()
-            # User is unique and valid, add to registered users
-            self.users[data.args.user_name] = user
-            self.state[data.args.user_name] = FREE
-            print(f'Successfully registered user: {user}')
-            return self.success()
+            self.register(**data.args.__dict__)
         elif data.command == 'setup-dht':
-            leader = self.lookup()
-            if (self.users.get(leader) is None or data.args.n < 2
-                or len(self.users) < data.args.n or self.num_DHTs > 0):
-                return self.failure()
-            # Begin setup of DHT
-            self.state[leader] = LEADER
-            dht_users = [leader]
-            for _ in range(1, data.args.n):
-                random_free_user = random.choice([user for user in self.state if self.state[user] == FREE])
-                dht_users.append(random_free_user)
-                self.state[random_free_user] = IN_DHT
-            self.num_DHTs += 1
-            self.success(body=[self.users[user] for user in dht_users])
-            # Wait for Leader to send dht-complete
-            while True:
-                bytes, self.out_addr = self.sock.recvfrom(1024)
-                print('Received data from', self.out_addr)
-                data = pickle.loads(bytes)
-                if data.command == 'dht-complete' and self.lookup() == leader:
-                    return self.success()
-                else:
-                    return self.failure()
+            self.setup_dht(**data.args.__dict__)
         elif data.command == 'query-dht':
-            if self.num_DHTs == 0:
-                return self.failure()
-            user = self.lookup()
-            if user is None or self.state[user] != FREE:
-                return self.failure()
-            # User is authorized to issue a query
-            random_user = random.choice([user for user in self.state if self.state[user] != FREE])
-            return self.success(self.users[random_user])
+            self.query_dht()
+        elif data.command == 'leave-dht':
+            self.leave_dht()
+        elif data.command == 'teardown-dht':
+            self.teardown_dht()
+
+    def register(self, user_name, port):
+        if len(user_name) > MAX_USR_LEN or port > MAX_PORT:
+            return self.failure()
+        user = User(user_name, self.out_addr, (self.out_addr[0], port))
+        # Check if any fields are identical to any fields already registered
+        for field in User._fields:
+            for name in self.users:
+                if self.users[name].__getattribute__(field) == user.__getattribute__(field):
+                    return self.failure()
+        # User is unique and valid, add to registered users
+        self.users[user_name] = user
+        self.state[user_name] = FREE
+        self.success()
+        print(f'Successfully registered user: {user}')
+
+    def setup_dht(self, n):
+        leader = self.lookup()
+        if (self.users.get(leader) is None or n < 2 or len(self.users) < n or self.num_DHTs > 0):
+            return self.failure()
+        # Begin setup of DHT
+        self.state[leader] = LEADER
+        dht_users = [leader]
+        for _ in range(1, n):
+            random_free_user = random.choice([user for user in self.state if self.state[user] == FREE])
+            dht_users.append(random_free_user)
+            self.state[random_free_user] = IN_DHT
+        self.num_DHTs += 1
+        self.success(body=[self.users[user] for user in dht_users])
+        # Wait for Leader to send dht-complete
+        self.wait_until(command='dht-complete', user=leader)
+        print(f'Successfully built DHT with {dht_users}')
+
+    def query_dht(self):
+        if self.num_DHTs == 0:
+            return self.failure()
+        user = self.lookup()
+        if user is None or self.state[user] != FREE:
+            return self.failure()
+        # User is authorized to issue a query
+        random_user = random.choice([user for user in self.state if self.state[user] != FREE])
+        return self.success(self.users[random_user])
+
+    def leave_dht(self):
+        if self.num_DHTs == 0:
+            return self.failure()
+        user = self.lookup()
+        # Verify user is registered and in the DHT
+        if user is None or self.state[user] == FREE:
+            return self.failure()
+        self.success()
+        # Wait for confirmation dht is rebuilt
+        self.wait_until(command='dht-rebuilt', user=user)
+
+    def teardown_dht(self):
+        if self.num_DHTs == 0:
+            return self.failure()
+        user = self.lookup()
+        # Verify user is registered and in the DHT
+        if user is None or self.state[user] != LEADER:
+            return self.failure()
+        self.success()
+        self.wait_until(command='teardown-complete', user=user)
+        # Free all users and decrement the number of DHTs
+        for user in self.state:
+            self.state[user] = FREE
+        self.num_DHTs -= 1
+        print(f'Successfully deleted DHT')
 
 
 FREE = 'Free'
