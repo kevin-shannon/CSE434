@@ -121,10 +121,12 @@ class Client:
             self.store(**data.args.__dict__)
         elif data.command == 'query':
             self.query(**data.args.__dict__)
-        elif data.command == 'leave':
-            self.leave()
         elif data.command == 'reset-id':
             self.reset_id(**data.args.__dict__)
+        elif data.command == 'reset-left':
+            self.next = data.args.next_user
+        elif data.command == 'reset_right':
+            self.prev = data.args.prev_user
         elif data.command == 'teardown':
             self.teardown()
 
@@ -218,7 +220,14 @@ class Client:
         self.n = n
         self.prev = prev
         self.next = next
-        self.hash_table = HashTable(size=353)
+        self.hash_table = HashTable(size=HASH_SIZE)
+
+    def del_dht_attrs(self):
+        del self.i
+        del self.n
+        del self.prev
+        del self.next
+        del self.hash_table
 
     def store(self, record):
         '''
@@ -280,19 +289,23 @@ class Client:
     def leave_dht(self):
         response = self.send_datagram(sn(command='leave-dht', args=None), self.host_addr)
         if response.status == SUCCESS:
-            # Rebuild the DHT
+            # Restucture DHT
             self.send_datagram(sn(command='reset-id', args=sn(i=0, n=self.n-1)), self.next.recv_addr)
-
-
-            #self.send_datagram(sn(command='dht-rebuilt', args=None), self.host_addr)
-
-    def leave(self):
-        pass
+            self.sock.sendto(pickle.dumps(sn(command='reset-left', args=sn(next_user=self.next))), self.prev.recv_addr)
+            self.sock.sendto(pickle.dumps(sn(command='reset-right', args=sn(prev_user=self.prev))), self.next.recv_addr)
+            # Rebuild the DHT
+            with open(self.stat_file) as f:
+                reader = csv.DictReader(f)
+                for row in reader:
+                    self.sock.sendto(pickle.dumps(sn(command='store', args=sn(record=dict(row)))), self.next.recv_addr)
+            # Tell the server who the new leader is
+            self.send_datagram(sn(command='dht-rebuilt', args=sn(leader=self.next)), self.host_addr)
+            self.del_dht_attrs()
 
     def reset_id(self, i, n):
         self.i = i
         self.n = n
-        self.hash_table = HashTable(size=353)
+        self.hash_table = HashTable(size=HASH_SIZE)
         # If the next the user is leaving the DHT
         if i == n - 1:
             self.sock.sendto(pickle.dumps(sn(status=SUCCESS, body=None)), self.next.out_addr)
@@ -314,16 +327,16 @@ class Client:
             self.send_datagram(sn(command='teardown-complete', args=None), self.host_addr)
 
     def teardown(self):
-        next = self.next
-        i = self.i
-        self.set_id(None, None, None, None)
-        if i == 0:
-            return self.sock.sendto(pickle.dumps(sn(status=SUCCESS, body=None)), self.sock.getsockname())
-        payload = sn(command='teardown', args=None)
-        self.sock.sendto(pickle.dumps(payload), next.recv_addr)
+        if self.i == 0:
+            self.sock.sendto(pickle.dumps(sn(status=SUCCESS, body=None)), self.sock.getsockname())
+        else:
+            payload = sn(command='teardown', args=None)
+            self.sock.sendto(pickle.dumps(payload), self.next.recv_addr)
+        self.del_dht_attrs()
 
 SUCCESS = 'SUCCESS'
 FAILURE = 'FAILURE'
+HASH_SIZE = 353
 User = namedtuple('User', 'user_name out_addr recv_addr')
 
 if __name__ == '__main__':

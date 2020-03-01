@@ -65,7 +65,7 @@ class Server:
         '''
         self.sock.sendto(pickle.dumps(sn(status=SUCCESS, body=body)), self.out_addr)
 
-    def lookup(self):
+    def lookup(self, user=None):
         '''
         Attempts to find user in list of registered users who has the same out_addr.
 
@@ -74,10 +74,16 @@ class Server:
         str or None
             If user is found it will return their user_name otherwise it will return None.
         '''
-        for user in self.users:
-            if self.users[user].out_addr == self.out_addr:
-                return user
-        return None
+        if user is None:
+            for user_name in self.users:
+                if self.users[user_name].out_addr == self.out_addr:
+                    return user_name
+            return None
+        else:
+            for user_name in self.users:
+                if self.users[user_name] == user:
+                    return user_name
+            return None
 
     def wait_until(self, command, user):
         while True:
@@ -85,7 +91,8 @@ class Server:
             print('Received data from', self.out_addr)
             data = pickle.loads(bytes)
             if data.command == command and self.lookup() == user:
-                return self.success()
+                self.success()
+                return data
             else:
                 self.failure()
 
@@ -155,7 +162,8 @@ class Server:
         return self.success(self.users[random_user])
 
     def leave_dht(self):
-        if self.num_DHTs == 0 or len(self.users) <= 2:
+        state_values = list(self.state.values())
+        if self.num_DHTs == 0 or state_values.count(LEADER) + state_values.count(IN_DHT) <= 2:
             return self.failure()
         user = self.lookup()
         # Verify user is registered and in the DHT
@@ -163,7 +171,12 @@ class Server:
             return self.failure()
         self.success()
         # Wait for confirmation dht is rebuilt
-        self.wait_until(command='dht-rebuilt', user=user)
+        data = self.wait_until(command='dht-rebuilt', user=user)
+        self.state[user] = FREE
+
+        leader = self.lookup(data.args.leader)
+        self.state[leader] = LEADER
+        print(f'{user} successfully left the DHT')
 
     def deregister(self):
         user = self.lookup()
@@ -175,7 +188,6 @@ class Server:
         self.state.pop(user)
         self.success()
         print(f'Successfully purged user {user}')
-
 
     def teardown_dht(self):
         if self.num_DHTs == 0:
