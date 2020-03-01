@@ -123,6 +123,8 @@ class Client:
             self.query(**data.args.__dict__)
         elif data.command == 'leave':
             self.leave()
+        elif data.command == 'reset-id':
+            self.reset_id(**data.args.__dict__)
         elif data.command == 'teardown':
             self.teardown()
 
@@ -183,7 +185,7 @@ class Client:
         '''
         payload = sn(command='register', args=sn(user_name=user_name, port=int(port)))
         response = self.send_datagram(payload, self.host_addr)
-        if response.status == 'SUCCESS':
+        if response.status == SUCCESS:
             start_new_thread(self.listen, (int(port),))
 
     def setup_dht(self, n):
@@ -197,7 +199,7 @@ class Client:
             Number of nodes in the DHT, cannot exceed number of free users.
         '''
         response = self.send_datagram(sn(command='setup-dht', args=sn(n=int(n),)), self.host_addr)
-        if response.status == 'SUCCESS':
+        if response.status == SUCCESS:
             n = len(response.body)
             self.set_id(0, n, response.body[-1 % n], response.body[1])
             for i in range(1, n):
@@ -246,7 +248,7 @@ class Client:
             Long Name of Country to query DHT.
         '''
         response = self.send_datagram(sn(command='query-dht', args=None), self.host_addr)
-        if response.status == 'SUCCESS':
+        if response.status == SUCCESS:
             payload = sn(command='query', args=sn(long_name=long_name, u_addr=self.sock.getsockname()))
             record = self.send_datagram(payload, response.body.recv_addr).body
             print(record)
@@ -267,50 +269,61 @@ class Client:
         if self.i == id:
             record = self.hash_table.lookup(long_name)
             if record is not None:
-                self.sock.sendto(pickle.dumps(sn(status='SUCCESS', body=record)), u_addr)
+                self.sock.sendto(pickle.dumps(sn(status=SUCCESS, body=record)), u_addr)
             else:
                 err_msg = f'Long name, {long_name}, could not be found in the DHT.'
-                self.sock.sendto(pickle.dumps(sn(status='FAILURE', body=err_msg)), u_addr)
+                self.sock.sendto(pickle.dumps(sn(status=FAILURE, body=err_msg)), u_addr)
         else:
             payload = sn(command='query', args=sn(long_name=long_name, u_addr=u_addr))
             self.sock.sendto(pickle.dumps(payload), self.next.recv_addr)
 
     def leave_dht(self):
         response = self.send_datagram(sn(command='leave-dht', args=None), self.host_addr)
-        if response.status == 'SUCCESS':
-            # Delete the DHT
-
+        if response.status == SUCCESS:
             # Rebuild the DHT
+            self.send_datagram(sn(command='reset-id', args=sn(i=0, n=self.n-1)), self.next.recv_addr)
 
-            self.send_datagram(sn(command='dht-rebuilt', args=None), self.host_addr)
+
+            #self.send_datagram(sn(command='dht-rebuilt', args=None), self.host_addr)
 
     def leave(self):
         pass
 
+    def reset_id(self, i, n):
+        self.i = i
+        self.n = n
+        self.hash_table = HashTable(size=353)
+        # If the next the user is leaving the DHT
+        if i == n - 1:
+            self.sock.sendto(pickle.dumps(sn(status=SUCCESS, body=None)), self.next.out_addr)
+        else:
+            payload = sn(command='reset-id', args=sn(i=i+1, n=n))
+            self.sock.sendto(pickle.dumps(payload), self.next.recv_addr)
+
     def deregister(self):
         response = self.send_datagram(sn(command='deregister', args=None), self.host_addr)
-        if response.status == 'SUCCESS':
+        if response.status == SUCCESS:
             sys.exit(0)
 
     def teardown_dht(self):
         response = self.send_datagram(sn(command='teardown-dht', args=None), self.host_addr)
-        if response.status == 'SUCCESS':
+        if response.status == SUCCESS:
             payload = sn(command='teardown', args=None)
             self.send_datagram(payload, self.next.recv_addr)
             # All done
             self.send_datagram(sn(command='teardown-complete', args=None), self.host_addr)
 
     def teardown(self):
-        self.hash_table = None
         next = self.next
         i = self.i
         self.set_id(None, None, None, None)
         if i == 0:
-            return self.sock.sendto(pickle.dumps(sn(status='SUCCESS', body=None)), self.sock.getsockname())
+            return self.sock.sendto(pickle.dumps(sn(status=SUCCESS, body=None)), self.sock.getsockname())
         payload = sn(command='teardown', args=None)
         self.sock.sendto(pickle.dumps(payload), next.recv_addr)
 
-
+SUCCESS = 'SUCCESS'
+FAILURE = 'FAILURE'
 User = namedtuple('User', 'user_name out_addr recv_addr')
 
 if __name__ == '__main__':

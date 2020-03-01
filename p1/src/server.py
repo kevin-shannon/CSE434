@@ -52,7 +52,7 @@ class Server:
         '''
         Sends a FAILURE response to self.out_addr.
         '''
-        self.sock.sendto(pickle.dumps(sn(status='FAILURE', body=None)), self.out_addr)
+        self.sock.sendto(pickle.dumps(sn(status=FAILURE, body=None)), self.out_addr)
 
     def success(self, body=None):
         '''
@@ -63,7 +63,7 @@ class Server:
         body : any
             Data relevant to response.
         '''
-        self.sock.sendto(pickle.dumps(sn(status='SUCCESS', body=body)), self.out_addr)
+        self.sock.sendto(pickle.dumps(sn(status=SUCCESS, body=body)), self.out_addr)
 
     def lookup(self):
         '''
@@ -155,7 +155,7 @@ class Server:
         return self.success(self.users[random_user])
 
     def leave_dht(self):
-        if self.num_DHTs == 0:
+        if self.num_DHTs == 0 or len(self.users) <= 2:
             return self.failure()
         user = self.lookup()
         # Verify user is registered and in the DHT
@@ -198,6 +198,8 @@ IN_DHT = 'InDHT'
 LEADER = 'Leader'
 MAX_PORT = 65535
 MAX_USR_LEN = 15
+SUCCESS = 'SUCCESS'
+FAILURE = 'FAILURE'
 User = namedtuple('User', 'user_name out_addr recv_addr')
 
 if __name__ == '__main__':
