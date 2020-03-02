@@ -1,3 +1,12 @@
+'''
+File name :   client.py
+Author :      Kevin Shannon
+Date :        02/29/2020
+Description : This script represents a client process. The user types in commands
+              to be sent to the server. Many commands involve the communication
+              between multiple other client processes. Each client should have
+              unique ports that it sends and listens to data on.
+'''
 import argparse
 import csv
 import pickle
@@ -216,6 +225,20 @@ class Client:
             self.send_datagram(sn(command='dht-complete', args=None), self.host_addr)
 
     def set_id(self, i, n, prev, next):
+        '''
+        Sets instance variables relating to the DHT. Clears the hash table.
+
+        Parameters
+        ----------
+        i : int
+            Identifier for position in DHT.
+        n : int
+            Number of users in the ring.
+        prev : __main__.User
+            The previous User.
+        next : __main__.User
+            The next User.
+        '''
         self.i = i
         self.n = n
         self.prev = prev
@@ -223,6 +246,9 @@ class Client:
         self.hash_table = HashTable(size=HASH_SIZE)
 
     def del_dht_attrs(self):
+        '''
+        Deletes instance variables relating to the DHT.
+        '''
         del self.i
         del self.n
         del self.prev
@@ -287,6 +313,10 @@ class Client:
             self.sock.sendto(pickle.dumps(payload), self.next.recv_addr)
 
     def leave_dht(self):
+        '''
+        Asks the server to leave, Tells all the other nodes to reset their ids,
+        reconnects left and right neighbors, rebuilds dht, tells the server.
+        '''
         response = self.send_datagram(sn(command='leave-dht', args=None), self.host_addr)
         if response.status == SUCCESS:
             # Restucture DHT
@@ -303,6 +333,10 @@ class Client:
             self.del_dht_attrs()
 
     def reset_id(self, i, n):
+        '''
+        Updates i and n values and sends message around the ring until it comes
+        back to the user that is leaving.
+        '''
         self.i = i
         self.n = n
         self.hash_table = HashTable(size=HASH_SIZE)
@@ -314,11 +348,17 @@ class Client:
             self.sock.sendto(pickle.dumps(payload), self.next.recv_addr)
 
     def deregister(self):
+        '''
+        If the server allows the user to deregister, terminate the application.
+        '''
         response = self.send_datagram(sn(command='deregister', args=None), self.host_addr)
         if response.status == SUCCESS:
             sys.exit(0)
 
     def teardown_dht(self):
+        '''
+        Tears down the DHT completely for all users.
+        '''
         response = self.send_datagram(sn(command='teardown-dht', args=None), self.host_addr)
         if response.status == SUCCESS:
             payload = sn(command='teardown', args=None)
@@ -327,6 +367,10 @@ class Client:
             self.send_datagram(sn(command='teardown-complete', args=None), self.host_addr)
 
     def teardown(self):
+        '''
+        Message send around the DHT deleting all DHT attributes until it gets
+        back to the leader.
+        '''
         if self.i == 0:
             self.sock.sendto(pickle.dumps(sn(status=SUCCESS, body=None)), self.sock.getsockname())
         else:

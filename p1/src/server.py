@@ -1,3 +1,12 @@
+'''
+File name :   server.py
+Author :      Kevin Shannon
+Date :        02/29/2020
+Description : This script represents a server process. Clients send commands to
+              the server, the server keeps track of state information and responds
+              back to the clients. This process will run indefinitly as would any
+              server.
+'''
 import argparse
 import pickle
 import random
@@ -67,7 +76,13 @@ class Server:
 
     def lookup(self, user=None):
         '''
-        Attempts to find user in list of registered users who has the same out_addr.
+        Attempts to find user within its list of registered users. If user isn't
+        given then it will match against self.out_addr.
+
+        Parameters
+        ----------
+        user : __main__.User (optional)
+            User to lookup.
 
         Returns
         -------
@@ -86,6 +101,20 @@ class Server:
             return None
 
     def wait_until(self, command, user):
+        '''
+        Wait until a certain command is recieved from a certain user.
+
+        Parameters
+        ----------
+        command : str
+            The name of the command to wait for.
+        user  str
+            The user_name of the user to wait for.
+        Returns
+        -------
+        types.SimpleNamespace
+            data recieved with the command.
+        '''
         while True:
             bytes, self.out_addr = self.sock.recvfrom(1024)
             print('Received data from', self.out_addr)
@@ -99,7 +128,7 @@ class Server:
     def handle_datagram(self, data):
         '''
         Used for handling commands from a client. Depending on the command
-        it will take the appropriate actions to respond.
+        it will call the appropriate function to process it.
 
         Parameters
         ----------
@@ -120,6 +149,16 @@ class Server:
             self.teardown_dht()
 
     def register(self, user_name, port):
+        '''
+        Registers a new user by updating the server's state.
+
+        Parameters
+        ----------
+        user_name : str
+            Name of the new user.
+        port : int
+            Port that the new user will listen on.
+        '''
         if len(user_name) > MAX_USR_LEN or port > MAX_PORT:
             return self.failure()
         user = User(user_name, self.out_addr, (self.out_addr[0], port))
@@ -135,6 +174,16 @@ class Server:
         print(f'Successfully registered user: {user}')
 
     def setup_dht(self, n):
+        '''
+        Handles request for setting up a new dht. Assigns user's new roles. Sends
+        back these new rules to the leader for them to finish the setup. Then waits
+        for the leader to give an all clear before accepting any other commands.
+
+        Parameters
+        ----------
+        n : int
+            Size of the DHT.
+        '''
         leader = self.lookup()
         if (self.users.get(leader) is None or n < 2 or len(self.users) < n or self.num_DHTs > 0):
             return self.failure()
@@ -152,6 +201,10 @@ class Server:
         print(f'Successfully built DHT with {dht_users}')
 
     def query_dht(self):
+        '''
+        If the user is able to query, this will send back a random user that the
+        query will start at.
+        '''
         if self.num_DHTs == 0:
             return self.failure()
         user = self.lookup()
@@ -159,9 +212,14 @@ class Server:
             return self.failure()
         # User is authorized to issue a query
         random_user = random.choice([user for user in self.state if self.state[user] != FREE])
-        return self.success(self.users[random_user])
+        self.success(self.users[random_user])
 
     def leave_dht(self):
+        '''
+        If the user is allowed to leave the DHT it will tell them. Wait for a signal
+        that the new DHT is built then will update states of the new leader and the
+        user that left.
+        '''
         state_values = list(self.state.values())
         if self.num_DHTs == 0 or state_values.count(LEADER) + state_values.count(IN_DHT) <= 2:
             return self.failure()
@@ -170,15 +228,17 @@ class Server:
         if user is None or self.state[user] == FREE:
             return self.failure()
         self.success()
-        # Wait for confirmation dht is rebuilt
+        # Wait for confirmation DHT is rebuilt
         data = self.wait_until(command='dht-rebuilt', user=user)
+        # Update state
         self.state[user] = FREE
-
-        leader = self.lookup(data.args.leader)
-        self.state[leader] = LEADER
+        self.state[self.lookup(data.args.leader)] = LEADER
         print(f'{user} successfully left the DHT')
 
     def deregister(self):
+        '''
+        Removes the user information from the server's state information.
+        '''
         user = self.lookup()
         # Verify user is registered and in the DHT
         if user is None or self.state[user] != FREE:
@@ -190,6 +250,11 @@ class Server:
         print(f'Successfully purged user {user}')
 
     def teardown_dht(self):
+        '''
+        If the user is able to teardown the DHT then it tells the user. Then it
+        waits for signal that the teardown is complete before setting all users
+        to be free.
+        '''
         if self.num_DHTs == 0:
             return self.failure()
         user = self.lookup()
