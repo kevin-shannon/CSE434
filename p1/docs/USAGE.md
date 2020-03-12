@@ -31,4 +31,21 @@ To make sure the querier is free, register a new user before running the followi
 ```
 query-dht Switzerland
 ```
-Congratulations! If you did everything correctly you should see a record containing more information about Switzerland.
+If you did everything correctly you should see a record containing more information about Switzerland.
+
+If a user wishes to leave the DHT then they can use
+```
+leave-dht
+```
+This will rebuild the dht without them and set there state back to free.
+
+If the user is free then they are allowed to deregister from the server with the following,
+```
+deregister
+```
+
+Finally, if the Leader wishes to completly destroy the DHT they can do so with
+```
+teardown-dht
+```
+
