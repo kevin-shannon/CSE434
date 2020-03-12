@@ -72,7 +72,7 @@ class Client:
     def listen(self, port):
         '''
         Forever listens on the specified port. Once data is received it passes
-        it on to self.handle_datagram.
+        it on to self.handle_segment.
 
         Parameters
         ----------
@@ -89,9 +89,9 @@ class Client:
         while True:
             raw_bytes, addr = sock.recvfrom(1024)
             data = pickle.loads(raw_bytes)
-            self.handle_datagram(data)
+            self.handle_segment(data)
 
-    def send_datagram(self, payload, addr):
+    def send_segment(self, payload, addr):
         '''
         Used for sending something when a response is expected. This will send a
         pickle of the payload to the specified address. It will then wait for a response.
@@ -114,7 +114,7 @@ class Client:
         print(f'{response.status} ({payload.command})')
         return response
 
-    def handle_datagram(self, data):
+    def handle_segment(self, data):
         '''
         Used for handling p2p commands recieved by the Client. Depending on the command
         it will call the appropriate function or set member variables.
@@ -195,7 +195,7 @@ class Client:
             Reasonable port that is not already in use, must be less than 65535.
         '''
         payload = sn(command='register', args=sn(user_name=user_name, port=int(port)))
-        response = self.send_datagram(payload, self.host_addr)
+        response = self.send_segment(payload, self.host_addr)
         if response.status == SUCCESS:
             start_new_thread(self.listen, (int(port),))
 
@@ -209,7 +209,7 @@ class Client:
         n : int
             Number of nodes in the DHT, cannot exceed number of free users.
         '''
-        response = self.send_datagram(sn(command='setup-dht', args=sn(n=int(n),)), self.host_addr)
+        response = self.send_segment(sn(command='setup-dht', args=sn(n=int(n),)), self.host_addr)
         if response.status == SUCCESS:
             n = len(response.body)
             self.set_id(0, n, response.body[-1 % n], response.body[1])
@@ -222,7 +222,7 @@ class Client:
                 for row in reader:
                     self.store(dict(row))
             # All done
-            self.send_datagram(sn(command='dht-complete', args=None), self.host_addr)
+            self.send_segment(sn(command='dht-complete', args=None), self.host_addr)
 
     def set_id(self, i, n, prev, next):
         '''
@@ -282,10 +282,10 @@ class Client:
         long_name : str
             Long Name of Country to query DHT.
         '''
-        response = self.send_datagram(sn(command='query-dht', args=None), self.host_addr)
+        response = self.send_segment(sn(command='query-dht', args=None), self.host_addr)
         if response.status == SUCCESS:
             payload = sn(command='query', args=sn(long_name=long_name, u_addr=self.sock.getsockname()))
-            record = self.send_datagram(payload, response.body.recv_addr).body
+            record = self.send_segment(payload, response.body.recv_addr).body
             print(record)
 
     def query(self, long_name, u_addr):
@@ -317,10 +317,10 @@ class Client:
         Asks the server to leave, Tells all the other nodes to reset their ids,
         reconnects left and right neighbors, rebuilds dht, tells the server.
         '''
-        response = self.send_datagram(sn(command='leave-dht', args=None), self.host_addr)
+        response = self.send_segment(sn(command='leave-dht', args=None), self.host_addr)
         if response.status == SUCCESS:
             # Restucture DHT
-            self.send_datagram(sn(command='reset-id', args=sn(i=0, n=self.n-1)), self.next.recv_addr)
+            self.send_segment(sn(command='reset-id', args=sn(i=0, n=self.n-1)), self.next.recv_addr)
             self.sock.sendto(pickle.dumps(sn(command='reset-left', args=sn(next_user=self.next))), self.prev.recv_addr)
             self.sock.sendto(pickle.dumps(sn(command='reset-right', args=sn(prev_user=self.prev))), self.next.recv_addr)
             # Rebuild the DHT
@@ -329,7 +329,7 @@ class Client:
                 for row in reader:
                     self.sock.sendto(pickle.dumps(sn(command='store', args=sn(record=dict(row)))), self.next.recv_addr)
             # Tell the server who the new leader is
-            self.send_datagram(sn(command='dht-rebuilt', args=sn(leader=self.next)), self.host_addr)
+            self.send_segment(sn(command='dht-rebuilt', args=sn(leader=self.next)), self.host_addr)
             self.del_dht_attrs()
 
     def reset_id(self, i, n):
@@ -351,7 +351,7 @@ class Client:
         '''
         If the server allows the user to deregister, terminate the application.
         '''
-        response = self.send_datagram(sn(command='deregister', args=None), self.host_addr)
+        response = self.send_segment(sn(command='deregister', args=None), self.host_addr)
         if response.status == SUCCESS:
             sys.exit(0)
 
@@ -359,12 +359,12 @@ class Client:
         '''
         Tears down the DHT completely for all users.
         '''
-        response = self.send_datagram(sn(command='teardown-dht', args=None), self.host_addr)
+        response = self.send_segment(sn(command='teardown-dht', args=None), self.host_addr)
         if response.status == SUCCESS:
             payload = sn(command='teardown', args=None)
-            self.send_datagram(payload, self.next.recv_addr)
+            self.send_segment(payload, self.next.recv_addr)
             # All done
-            self.send_datagram(sn(command='teardown-complete', args=None), self.host_addr)
+            self.send_segment(sn(command='teardown-complete', args=None), self.host_addr)
 
     def teardown(self):
         '''

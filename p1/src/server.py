@@ -55,7 +55,7 @@ class Server:
             bytes, self.out_addr = self.sock.recvfrom(1024)
             print('Received data from', self.out_addr)
             data = pickle.loads(bytes)
-            self.handle_datagram(data)
+            self.handle_segment(data)
 
     def failure(self):
         '''
@@ -125,7 +125,7 @@ class Server:
             else:
                 self.failure()
 
-    def handle_datagram(self, data):
+    def handle_segment(self, data):
         '''
         Used for handling commands from a client. Depending on the command
         it will call the appropriate function to process it.
